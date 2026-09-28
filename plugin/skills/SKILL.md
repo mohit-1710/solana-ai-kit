@@ -41,7 +41,7 @@ For Jupiter, Metaplex and Helius the official skill repos are the primary source
 Run the installer in your project to get what the plugin can't carry: the 18 external skill submodules, the project CLAUDE.md, and the curated permissions and sandbox policy.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/solanabr/solana-ai-kit/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/solanabr/ai-kit/main/install.sh | bash
 ```
 
 The project README ("External Skill Submodules" and "Install as a Claude Code plugin") explains when to pick the plugin or the full install; they are complementary. If both are active in one project, `/solana-ai-kit:doctor` flags the duplicate commands, hooks and MCP servers.

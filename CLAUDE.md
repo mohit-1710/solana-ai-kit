@@ -70,6 +70,9 @@ When X changes, also update Y:
 | Add/remove **.env.example key** | `.claude/commands/setup-mcp.md` |
 | Add/remove **submodule** | .gitmodules, README.md submodules table + tree, QUICK-START.md tree, .claude/skills/SKILL.md routing |
 | Modify **install.sh** | Test: `bash tests/test_install.sh` in temp dir |
+| Change the **repo URL** | Update everywhere EXCEPT `.claude/bin/update.sh:16` — that line is inside the frozen 1-93 region (see the NOTE at line 94) and editing it breaks self-update for every existing install. GitHub's rename redirect covers it. |
+| Bump the **pinned agent CLIs** (`opencode-ai`, `@openai/codex` in `.github/workflows/ci.yml`) | Re-check that `opencode debug skill` and `codex debug prompt-input` still emit the shape the `agents-mode-clients` job greps — both subcommands are undocumented |
+| Add a **Claude-Code-only** command (describes the kit repo, `/plugin`, or anything `--agents` installs can't do) | Add it to `AGENTS_SKIP_FILES` in `install.sh` + `.claude/bin/update.sh` so it isn't installed there; `tests/test_install_agents_only.sh` asserts the two lists match |
 | Modify **CLAUDE-solana.md** | This ships to ALL user projects — different audience than this repo |
 | Bump **`.claude/VERSION`** | Also bump `plugin/.claude-plugin/plugin.json` `version` and `.claude-plugin/marketplace.json` `metadata.version` (both must match VERSION semver — `tests/test_plugin.sh` enforces), and the README.md version badge (`tests/test_cross_references.sh` enforces). The plugin is pinned by `plugin.json` `version` + the semver `vX.Y.Z` git tag; do NOT run `claude plugin tag` (it creates a redundant `{name}--vX.Y.Z` tag that duplicates the semver tag). |
 

@@ -36,7 +36,7 @@ grep -E '^[A-Z_]+=$' .env 2>/dev/null | cut -d= -f1      # present but empty
 **6. Kit version vs upstream.**
 ```bash
 cat .claude/VERSION
-git ls-remote --tags --sort=-v:refname https://github.com/solanabr/solana-ai-kit | head -3
+git ls-remote --tags --sort=-v:refname https://github.com/solanabr/ai-kit | head -3
 ```
 - WARN behind the latest tag: `bash .claude/bin/update.sh` (`.agents/bin/update.sh` for `--agents` installs); preview with `--dry-run`
 - FAIL no `VERSION` file (corrupted or pre-1.0 config): the same update command
@@ -51,7 +51,7 @@ fi
 grep -q 'memsearch-mcp' .mcp.json 2>/dev/null && echo "RETIRED memsearch-mcp entry"
 ```
 OK when it parses and lists the default servers (helius, solana-dev, context7) plus any the user added.
-- FAIL parse failure: `curl -fsSL https://raw.githubusercontent.com/solanabr/solana-ai-kit/main/.mcp.json -o .mcp.json`
+- FAIL parse failure: `curl -fsSL https://raw.githubusercontent.com/solanabr/ai-kit/main/.mcp.json -o .mcp.json`
 - WARN a listed server's API key failed check 5: `/setup-mcp`
 - WARN `surfpool` listed but the CLI is missing: `curl -L https://surfpool.run/install | sh` (or `brew install txtx/taps/surfpool`)
 - WARN `memsearch-mcp` listed: that npm package is not published, so the server never starts; delete the `memsearch` entry from `.mcp.json`

@@ -5,10 +5,10 @@
 ```bash
 # Option 1: One-liner installer (recommended)
 curl -fsSL https://aikit.superteam.codes | bash
-# Fallback (or before the aikit.superteam.codes DNS is live): curl -fsSL https://raw.githubusercontent.com/solanabr/solana-ai-kit/main/install.sh | bash
+# Fallback (or before the aikit.superteam.codes DNS is live): curl -fsSL https://raw.githubusercontent.com/solanabr/ai-kit/main/install.sh | bash
 
 # Option 2: Manual setup
-git clone --recurse-submodules https://github.com/solanabr/solana-ai-kit.git
+git clone --recurse-submodules https://github.com/solanabr/ai-kit.git
 cp -r solana-ai-kit/.claude /path/to/your-project/
 cp solana-ai-kit/CLAUDE-solana.md /path/to/your-project/CLAUDE.md
 cd /path/to/your-project && git submodule update --init --recursive
@@ -44,7 +44,7 @@ The kit pins no effort level, agent teams or LSP plugins; README's "Settings the
 Prefer Claude Code's plugin system? solana-ai-kit is its own marketplace. From inside Claude Code:
 
 ```text
-/plugin marketplace add https://github.com/solanabr/solana-ai-kit.git
+/plugin marketplace add https://github.com/solanabr/ai-kit.git
 /plugin install solana-ai-kit@stbr
 ```
 

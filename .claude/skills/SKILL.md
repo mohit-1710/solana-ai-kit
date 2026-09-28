@@ -8,7 +8,7 @@ user-invocable: true
 
 Find the task, read the linked file, and follow further links only as needed. Paths are relative to this file.
 
-When sources overlap: the program-code house rules in CLAUDE.md win; a protocol's official skill wins for its own SDK (Jupiter, Metaplex, Helius); [ext/solana-dev](ext/solana-dev/skills/solana-dev/SKILL.md) wins for general Solana work; sendai and community skills fill gaps only.
+When sources overlap: the program-code house rules in the project instruction file (`CLAUDE.md`, or `AGENTS.md` in `--agents` installs) win; a protocol's official skill wins for its own SDK (Jupiter, Metaplex, Helius); [ext/solana-dev](ext/solana-dev/skills/solana-dev/SKILL.md) wins for general Solana work; sendai and community skills fill gaps only.
 
 ## Programs
 

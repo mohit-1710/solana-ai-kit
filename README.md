@@ -2,7 +2,7 @@
 
 # Solana AI Kit
 
-[![CI](https://github.com/solanabr/solana-ai-kit/actions/workflows/ci.yml/badge.svg)](https://github.com/solanabr/solana-ai-kit/actions/workflows/ci.yml)
+[![CI](https://github.com/solanabr/ai-kit/actions/workflows/ci.yml/badge.svg)](https://github.com/solanabr/ai-kit/actions/workflows/ci.yml)
 ![Version](https://img.shields.io/badge/version-2.1.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Solana](https://img.shields.io/badge/Solana-black?logo=solana)
@@ -39,20 +39,20 @@ claude -m "/cleanup"  # then start claude code running /cleanup so top-level dir
 
 # Option 1: One-liner installer (Claude Code)
 curl -fsSL https://aikit.superteam.codes | bash
-# Fallback (or before the aikit.superteam.codes DNS is live): curl -fsSL https://raw.githubusercontent.com/solanabr/solana-ai-kit/main/install.sh | bash
+# Fallback (or before the aikit.superteam.codes DNS is live): curl -fsSL https://raw.githubusercontent.com/solanabr/ai-kit/main/install.sh | bash
 
 # Option 2: One-liner installer (Codex, Opencode, everything else)
 curl -fsSL https://aikit.superteam.codes | bash -s -- --agents
-# Fallback (or before the aikit.superteam.codes DNS is live): curl -fsSL https://raw.githubusercontent.com/solanabr/solana-ai-kit/main/install.sh | bash -s -- --agents
+# Fallback (or before the aikit.superteam.codes DNS is live): curl -fsSL https://raw.githubusercontent.com/solanabr/ai-kit/main/install.sh | bash -s -- --agents
 
 # Option 3: Manual setup
-git clone --recurse-submodules https://github.com/solanabr/solana-ai-kit.git
+git clone --recurse-submodules https://github.com/solanabr/ai-kit.git
 cp -r solana-ai-kit/.claude /path/to/your-project/
 cp solana-ai-kit/CLAUDE-solana.md /path/to/your-project/CLAUDE.md
 cd /path/to/your-project && git submodule update --init --recursive
 
 # Option 4: Claude Code plugin (run inside Claude Code)
-/plugin marketplace add https://github.com/solanabr/solana-ai-kit.git
+/plugin marketplace add https://github.com/solanabr/ai-kit.git
 /plugin install solana-ai-kit@stbr
 # Commands then namespace as /solana-ai-kit:<name>. The plugin is the CORE kit
 # (agents/commands/local skills/MCP/hooks); the curl one-liner (Option 1) is the
@@ -65,7 +65,7 @@ claude
 
 ### `--agents` Flag
 
-Pass `--agents` to install everything into `.agents/` instead of `.claude/`. Same content, different directory name. Useful when `.claude/` is already taken or for non-Claude AI tools (Cursor, Windsurf, Copilot, etc.).
+Pass `--agents` to install everything into `.agents/` instead of `.claude/`, with the instructions in `AGENTS.md` instead of `CLAUDE.md`. Codex and opencode read `AGENTS.md` and the skills in `.agents/skills/`, and the installed files point at `.agents/` paths. Useful when `.claude/` is already taken or for non-Claude AI tools. `.agents/agents/`, `.agents/commands/` and `.mcp.json` keep Claude Code's format, so other tools can use them as prompts or context.
 
 ```bash
 bash install.sh --agents /path/to/your-project
@@ -100,7 +100,7 @@ This guides you through the Helius API key and offers the [optional MCP servers]
 solana-ai-kit is also its own Claude Code marketplace serving one **core plugin**. From inside Claude Code:
 
 ```text
-/plugin marketplace add https://github.com/solanabr/solana-ai-kit.git
+/plugin marketplace add https://github.com/solanabr/ai-kit.git
 /plugin install solana-ai-kit@stbr
 ```
 
