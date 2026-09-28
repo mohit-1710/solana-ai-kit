@@ -5,7 +5,7 @@ description: "Program deployment runbook: devnet then mainnet, verifiable builds
 
 # Deployment
 
-The runbook behind `/deploy`; `/setup-ci-cd` owns the CI workflow. Kit policy: devnet first, and mainnet only with the user's explicit go-ahead. The PreToolUse hook matches only the literal `anchor deploy` and `solana program deploy` and blocks them when the command or the configured cluster says mainnet, unless the command is prefixed with `CONFIRM_MAINNET=1`. `anchor program deploy|upgrade`, `anchor upgrade`, `solana program write-buffer`, `set-upgrade-authority` and `--final` pass unchecked, so get the same confirmation before running any of them against mainnet.
+The runbook behind `/deploy`; `/setup-ci-cd` owns the CI workflow. Kit policy: devnet first, and mainnet only with the user's explicit go-ahead. Get that go-ahead yourself; do not rely on a tool gate to stop you. Claude Code adds one — a PreToolUse hook matching only the literal `anchor deploy` and `solana program deploy`, blocking them when the command or the configured cluster says mainnet unless prefixed with `CONFIRM_MAINNET=1`. Even there, `anchor program deploy|upgrade`, `anchor upgrade`, `solana program write-buffer`, `set-upgrade-authority` and `--final` pass unchecked. Runtimes that do not read `settings.json` (Codex, opencode) have no gate at all, so every mainnet command needs explicit confirmation first.
 
 ## Anchor 1.x changes that affect deploys
 

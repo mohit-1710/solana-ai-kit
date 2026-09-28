@@ -4,11 +4,11 @@ set -euo pipefail
 # Solana AI Kit Installer
 # Usage:
 #   curl -fsSL https://aikit.superteam.codes | bash
-#   (fallback if DNS not yet live: curl -fsSL https://raw.githubusercontent.com/solanabr/solana-ai-kit/main/install.sh | bash)
+#   (fallback if DNS not yet live: curl -fsSL https://raw.githubusercontent.com/solanabr/ai-kit/main/install.sh | bash)
 #   bash install.sh /path/to/project
 #   bash install.sh --agents /path/to/project   # installs into .agents/ instead of .claude/
 
-REPO_URL="https://github.com/solanabr/solana-ai-kit.git"
+REPO_URL="https://github.com/solanabr/ai-kit.git"
 SCRIPT_VERSION="dev"
 
 # Parse flags
@@ -112,18 +112,14 @@ fi
 # mode never creates. Left alone: ~/.claude/ (user-global), paths inside the
 # vendored ext/ repos, bin/ (scripts resolve their own dir), and lines that
 # already name .agents/ (those are written to handle both modes).
-#
-# AGENTS_REWRITE_SKIP lists files whose .claude/ paths describe the kit's own
-# repository rather than the installed project, so rewriting them makes them
-# false. /cleanup turns a fork of the kit into a project, and a fork's config
-# dir is always .claude/ whatever mode the user later installs in.
-AGENTS_REWRITE_SKIP="commands/cleanup.md"
+# Claude-Code-only files, not installed by --agents. /cleanup turns a fork of the
+# kit repo into a project (README Option 0, run as `claude -m /cleanup`); its paths
+# describe the kit's own repo, so in an .agents/ project every step of it is false.
+# Not shipping it beats rewriting it into something plausible but wrong.
+AGENTS_SKIP_FILES='commands/cleanup.md'
 agents_paths() {
-  local f skip
+  local f
   for f in "$@"; do
-    for skip in $AGENTS_REWRITE_SKIP; do
-      case "$f" in */"$skip") continue 2 ;; esac
-    done
     [ -f "$f" ] && grep -q '\.claude/' "$f" || continue
     sed -E '/\.agents\//!{s#(^|[^[:alnum:]_./~-])\.claude/#\1.agents/#g;s#([$][{]CLAUDE_PROJECT_DIR:-[.][}])/\.claude/#\1/.agents/#g;}' \
       "$f" > "$f.tmp" && cat "$f.tmp" > "$f" && rm -f "$f.tmp"
@@ -136,21 +132,27 @@ agents_paths() {
 # would otherwise make every run look like a user edit.
 strip_md_comments() {
   awk '
-    { line = $0; out = ""; blank = (line ~ /^[ \t]*$/)
+    { line = $0; cr = ""
+      if (sub(/\r$/, "", line)) cr = "\r"
+      out = ""; blank = (line ~ /^[ \t]*$/)
       while (1) {
         if (inc) { p = index(line, "-->"); if (p == 0) { line = ""; break }
                    line = substr(line, p + 3); inc = 0 }
         else     { p = index(line, "<!--"); if (p == 0) { out = out line; break }
                    out = out substr(line, 1, p - 1); line = substr(line, p + 4); inc = 1 }
       }
-      if (out ~ /[^ \t]/) { print out; prev_blank = 0; next }
+      if (out ~ /[^ \t]/) { print out cr; prev_blank = 0; next }
       if (!blank) next
       if (prev_blank) next
-      print ""; prev_blank = 1 }
+      print cr; prev_blank = 1 }
+    END { if (inc) {
+            print "strip_md_comments: unterminated <!-- in " FILENAME > "/dev/stderr"
+            exit 1 } }
   ' "$1" > "$1.tmp" && cat "$1.tmp" > "$1" && rm -f "$1.tmp"
 }
 if [ "$AGENTS_ONLY" = true ]; then
   R="$TEMP_DIR/repo"
+  for f in $AGENTS_SKIP_FILES; do rm -f "$R/.claude/$f"; done
   strip_md_comments "$R/CLAUDE-solana.md"
   agents_paths "$R/CLAUDE-solana.md" "$R/.gitmodules" "$R/.claude/settings.json"
   while IFS= read -r f; do agents_paths "$f"; done < <(
@@ -182,13 +184,18 @@ done
 # is not enough of a test.
 if [ -d "$TARGET_DIR/$CONFIG_DIR/skills/ext" ]; then
   TARGET_ABS="$(cd "$TARGET_DIR" && pwd -P)"
+  # A real submodule's gitdir lives under the target's git common dir, which is
+  # NOT inside the target when the project is a git worktree or is itself a
+  # submodule. Accept both, or reinstalling into a worktree deletes live gitfiles.
+  GIT_COMMON="$(cd "$TARGET_DIR" && git rev-parse --git-common-dir 2>/dev/null || true)"
+  [ -n "$GIT_COMMON" ] && GIT_COMMON="$(cd "$TARGET_DIR" && cd "$GIT_COMMON" 2>/dev/null && pwd -P || true)"
   while IFS= read -r gitfile; do
-    gitdir="$(sed -n 's/^gitdir: //p' "$gitfile")"
+    gitdir="$(sed -n 's/^gitdir: //p' "$gitfile" | tr -d '\r')"
     gitdir_abs=""
     [ -n "$gitdir" ] && gitdir_abs="$(cd "$(dirname "$gitfile")" && cd "$gitdir" 2>/dev/null && pwd -P || true)"
     case "$gitdir_abs" in
       "$TARGET_ABS"/*) ;;
-      *) rm -f "$gitfile" ;;
+      *) if [ -n "$GIT_COMMON" ] && [ "${gitdir_abs#"$GIT_COMMON"/}" != "$gitdir_abs" ]; then :; else rm -f "$gitfile"; fi ;;
     esac
   done < <(find "$TARGET_DIR/$CONFIG_DIR/skills/ext" -name .git -type f)
 fi
@@ -277,10 +284,22 @@ if ! grep -qF ">>> solana-ai-kit config" "$GITIGNORE"; then
     printf '# <<< solana-ai-kit config <<<\n'
   } >> "$GITIGNORE"
   ok "Kit config gitignored by default — run /commit-claude-config to version it"
-elif [ "$AGENTS_ONLY" = true ] && ! sed -n '/>>> solana-ai-kit config/,/<<< solana-ai-kit config/p' "$GITIGNORE" | grep -qxF "$INSTR_FILE"; then
-  # Older --agents installs listed CLAUDE.md in the block; add AGENTS.md
-  awk -v f="$INSTR_FILE" '/^# <<< solana-ai-kit config <<</ { print f } { print }' "$GITIGNORE" > "$GITIGNORE.tmp" \
-    && cat "$GITIGNORE.tmp" > "$GITIGNORE" && rm -f "$GITIGNORE.tmp"
+elif [ "$AGENTS_ONLY" = true ]; then
+  # A block written by an earlier install can be missing this mode's entries: an
+  # older --agents install listed CLAUDE.md, and installing --agents next to an
+  # existing .claude/ install left .agents/ untracked (60MB of vendored trees).
+  ADDED_IGNORE=""
+  for entry in "$CONFIG_DIR/" "$INSTR_FILE"; do
+    if sed -n '/>>> solana-ai-kit config/,/<<< solana-ai-kit config/p' "$GITIGNORE" | grep -qxF "$entry"; then
+      continue
+    fi
+    awk -v f="$entry" '/^# <<< solana-ai-kit config <<</ { print f } { print }' "$GITIGNORE" > "$GITIGNORE.tmp" \
+      && cat "$GITIGNORE.tmp" > "$GITIGNORE" && rm -f "$GITIGNORE.tmp"
+    ADDED_IGNORE="$ADDED_IGNORE $entry"
+  done
+  if [ -n "$ADDED_IGNORE" ]; then
+    ok "Added to the gitignore config block:$ADDED_IGNORE"
+  fi
 fi
 
 # 3) Local-only — never committed (.env holds API keys once filled; .env.example stays tracked)

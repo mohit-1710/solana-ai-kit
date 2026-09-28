@@ -50,7 +50,8 @@ assert_eq "15" "$AGENT_COUNT" "Agent count is 15"
 
 # Count commands (should match full install)
 CMD_COUNT=$(find "$TEMP_DIR/.agents/commands" -name "*.md" | wc -l | tr -d ' ')
-assert_eq "30" "$CMD_COUNT" "Command count is 30"
+KIT_CMDS=$(find "$REPO_ROOT/.claude/commands" -name "*.md" | wc -l | tr -d ' ')
+assert_eq "$((KIT_CMDS - 1))" "$CMD_COUNT" "Command count is the kit's minus the Claude-Code-only /cleanup"
 
 # AGENTS.md (read by Codex and opencode) should exist at project root; CLAUDE.md stays Claude Code's
 assert_file_exists "$TEMP_DIR/AGENTS.md" "AGENTS.md exists at project root"
@@ -74,10 +75,9 @@ install_agents() { bash "$REPO_ROOT/install.sh" --agents "$1" >"$WORK/last.log" 
 # Project-relative .claude/ paths would dangle in an agents-mode install (this mode
 # never creates .claude/). Intentional ones are skipped: ~/.claude/ and $HOME/.claude/
 # (user-global), paths inside the vendored ext/ repos, bin/ (scripts resolve their own
-# dir and read the kit repo's .claude/ layout), and commands/cleanup.md, which
-# describes the kit's own repository (install.sh's AGENTS_REWRITE_SKIP).
+# dir and read the kit repo's .claude/ layout). Files that describe the kit's own
+# repo are not installed at all in this mode (install.sh's AGENTS_SKIP_FILES).
 CLAUDE_REF='(^|[^[:alnum:]_./~-])\.claude/|CLAUDE_PROJECT_DIR:-[.][}]/\.claude/'
-CLAUDE_REF_EXEMPT='/commands/cleanup\.md:'
 dangling_claude_refs() {
   local d="$1"
   {
@@ -85,7 +85,7 @@ dangling_claude_refs() {
       "$d/.agents" "$d/AGENTS.md" "$d/.gitmodules" 2>/dev/null || true
     sed -n '/>>> solana-ai-kit config/,/<<< solana-ai-kit config/p' "$d/.gitignore" 2>/dev/null \
       | grep '\.claude' || true
-  } | grep -vE "$CLAUDE_REF_EXEMPT" | grep -v '\.agents/' || true
+  } | grep -v '\.agents/' || true
 }
 
 # Lines naming BOTH .claude/ and .agents/ are "works in either mode" idioms. The
@@ -98,6 +98,16 @@ both_mode_files() {
         grep -qE "$CLAUDE_REF" "$f" && grep -q '\.agents/' "$f" && echo "${f#"$1"/.agents/}"
       done | LC_ALL=C sort -u || true
 }
+skip_value() {
+  python3 -c '
+import re, sys
+s = open(sys.argv[1], encoding="utf-8").read()
+m = re.search(r"^AGENTS_SKIP_FILES=\x27(.*?)\x27$", s, re.M | re.S)
+sys.stdout.write(m.group(1) if m else "<<missing>>")
+' "$1"
+}
+SKIP_FILES_INSTALL="$(skip_value "$REPO_ROOT/install.sh")"
+SKIP_FILES_UPDATE="$(skip_value "$REPO_ROOT/.claude/bin/update.sh")"
 BOTH_MODE_EXPECTED='commands/commit-claude-config.md
 commands/doctor.md
 commands/resync.md
@@ -144,23 +154,27 @@ echo "[instruction file + paths]"
 # Generic, not tied to CLAUDE-solana.md's wording: the only differences allowed are
 # .claude/ -> .agents/ path rewrites and the removal of HTML comments (Codex and
 # opencode do not strip those, so they would reach the model as instructions).
+# Independent oracle: a regex engine, not a second copy of the shipped awk. Copying
+# the implementation here would make the comparison below assert nothing.
 strip_comments_norm() {
-  awk '
-    { line = $0; out = ""; blank = (line ~ /^[ \t]*$/)
-      while (1) {
-        if (inc) { p = index(line, "-->"); if (p == 0) { line = ""; break }
-                   line = substr(line, p + 3); inc = 0 }
-        else     { p = index(line, "<!--"); if (p == 0) { out = out line; break }
-                   out = out substr(line, 1, p - 1); line = substr(line, p + 4); inc = 1 }
-      }
-      if (out ~ /[^ \t]/) { print out; prev_blank = 0; next }
-      if (!blank) next
-      if (prev_blank) next
-      print ""; prev_blank = 1 }
-  ' "$1"
+  python3 -c '
+import re, sys
+s = open(sys.argv[1], encoding="utf-8").read()
+s = re.sub(r"<!--.*?-->", "", s, flags=re.S)
+out, prev_blank = [], False
+for line in s.split("\n"):
+    if line.strip():
+        out.append(line); prev_blank = False
+    elif not prev_blank:
+        out.append(""); prev_blank = True
+sys.stdout.write("\n".join(out).rstrip("\n") + "\n")
+' "$1"
 }
-sed 's#\.agents/#.claude/#g' "$TEMP_DIR/AGENTS.md" > "$WORK/agents-md.norm" 2>/dev/null || true
-strip_comments_norm "$REPO_ROOT/CLAUDE-solana.md" | sed 's#\.agents/#.claude/#g' > "$WORK/claude-solana-md.norm"
+# drop trailing blank lines on both sides: they carry no meaning in markdown and
+# the awk keeps one where the oracle does not.
+trim_trailing_blanks() { awk 'NF { last = NR } { line[NR] = $0 } END { for (i = 1; i <= last; i++) print line[i] }'; }
+sed 's#\.agents/#.claude/#g' "$TEMP_DIR/AGENTS.md" 2>/dev/null | trim_trailing_blanks > "$WORK/agents-md.norm" || true
+strip_comments_norm "$REPO_ROOT/CLAUDE-solana.md" | sed 's#\.agents/#.claude/#g' | trim_trailing_blanks > "$WORK/claude-solana-md.norm"
 assert_cmd_success "cmp -s '$WORK/agents-md.norm' '$WORK/claude-solana-md.norm'" \
   "AGENTS.md is CLAUDE-solana.md with only path rewrites and comments stripped"
 assert_eq "" "$(grep -n '<!--\|-->' "$TEMP_DIR/AGENTS.md" || true)" \
@@ -172,8 +186,17 @@ assert_eq "AGENTS.md" "$(sed -n '/>>> solana-ai-kit config/,/<<< solana-ai-kit c
 assert_no_dangling_refs "$TEMP_DIR" "no dangling .claude/ references in the installed tree"
 assert_eq "$BOTH_MODE_EXPECTED" "$(both_mode_files "$TEMP_DIR")" \
   "only the known both-mode files keep a .claude/ path (new ones need classifying)"
-assert_contains "$(cat "$TEMP_DIR/.agents/commands/cleanup.md")" ".claude/CHANGELOG.md" \
-  "cleanup.md keeps .claude/ paths: it describes the kit repo, not the install"
+# CLAUDE_REF only matches the .claude/ DIRECTORY. The bare instruction filename is a
+# separate class: a file telling Codex to read or write CLAUDE.md names a file that
+# mode never creates. Lines naming AGENTS.md too are fine; CLAUDE-solana.md is the source.
+assert_eq "" "$(grep -rn --exclude-dir=ext --exclude-dir=bin -E '(^|[^.~/[:alnum:]])CLAUDE(\.local)?\.md' \
+    "$TEMP_DIR/.agents" "$TEMP_DIR/AGENTS.md" 2>/dev/null \
+    | grep -v 'AGENTS\.md' | grep -v 'CLAUDE-solana\.md' || true)" \
+  "nothing points Codex at a bare CLAUDE.md without also naming AGENTS.md"
+assert_eq "$SKIP_FILES_INSTALL" "$SKIP_FILES_UPDATE" \
+  "AGENTS_SKIP_FILES is identical in install.sh and bin/update.sh"
+assert_file_not_exists "$TEMP_DIR/.agents/commands/cleanup.md" \
+  "/cleanup is not installed in --agents mode (it describes a Claude Code fork flow)"
 assert_contains "$(cat "$TEMP_DIR/.agents/commands/commit-claude-config.md")" 'INSTR_FILE' \
   "/commit-claude-config resolves the instruction file so it stages AGENTS.md"
 assert_submodules_under_agents "$TEMP_DIR" "fresh install"
@@ -263,5 +286,39 @@ for OLD in "$WORK/old-update" "$WORK/old-reinstall"; do
     "$NAME: AGENTS.md added to the .gitignore config block"
   assert_submodules_under_agents "$OLD" "$NAME"
 done
+
+# ── Reinstall into a git worktree keeps real submodule gitfiles ──────────────
+# A submodule's gitdir lives under the repo's git COMMON dir, which sits outside
+# the project when the project is a linked worktree. Matching only "inside the
+# target" deletes live submodules there.
+echo "[git worktree target]"
+WT_ROOT="$(mktemp -d)"
+git init -q "$WT_ROOT/main"
+git -C "$WT_ROOT/main" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
+git -C "$WT_ROOT/main" worktree add -q "$WT_ROOT/wt" -b wtb
+mkdir -p "$WT_ROOT/wt/.agents/skills/ext/mysub" "$WT_ROOT/main/.git/worktrees/wt/modules/mysub"
+printf 'gitdir: ../../../../../main/.git/worktrees/wt/modules/mysub\n' \
+  > "$WT_ROOT/wt/.agents/skills/ext/mysub/.git"
+install_agents "$WT_ROOT/wt" || true
+assert_file_exists "$WT_ROOT/wt/.agents/skills/ext/mysub/.git" \
+  "reinstall into a git worktree keeps a real submodule gitfile"
+bash "$WT_ROOT/wt/.agents/bin/update.sh" >/dev/null 2>&1 || true
+assert_file_exists "$WT_ROOT/wt/.agents/skills/ext/mysub/.git" \
+  "update.sh in a git worktree keeps a real submodule gitfile"
+rm -rf "$WT_ROOT"
+
+
+# ── Dual install: .agents/ must join an existing .claude/ gitignore block ────
+echo "[dual install gitignore]"
+DUAL="$(mktemp -d)"
+(cd "$DUAL" && git init -q)
+bash "$REPO_ROOT/install.sh" "$DUAL" >/dev/null 2>&1 || true
+install_agents "$DUAL" || true
+DUAL_BLOCK="$(sed -n '/>>> solana-ai-kit config/,/<<< solana-ai-kit config/p' "$DUAL/.gitignore")"
+assert_contains "$DUAL_BLOCK" ".agents/" "dual install gitignores .agents/ too"
+assert_contains "$DUAL_BLOCK" "AGENTS.md" "dual install gitignores AGENTS.md too"
+assert_eq "" "$(cd "$DUAL" && git status --porcelain --untracked-files=normal | grep '\.agents' || true)" \
+  "dual install leaves no untracked .agents/ tree"
+rm -rf "$DUAL"
 
 print_summary
