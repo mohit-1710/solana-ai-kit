@@ -70,6 +70,8 @@ When X changes, also update Y:
 | Add/remove **.env.example key** | `.claude/commands/setup-mcp.md` |
 | Add/remove **submodule** | .gitmodules, README.md submodules table + tree, QUICK-START.md tree, .claude/skills/SKILL.md routing |
 | Modify **install.sh** | Test: `bash tests/test_install.sh` in temp dir |
+| Bump the **pinned agent CLIs** (`opencode-ai`, `@openai/codex` in `.github/workflows/ci.yml`) | Re-check that `opencode debug skill` and `codex debug prompt-input` still emit the shape the `agents-mode-clients` job greps — both subcommands are undocumented |
+| Add a file whose `.claude/` paths describe the **kit repo** rather than the install | Add it to `AGENTS_REWRITE_SKIP` in `install.sh` + `.claude/bin/update.sh`, and to `CLAUDE_REF_EXEMPT` in `tests/test_install_agents_only.sh` |
 | Modify **CLAUDE-solana.md** | This ships to ALL user projects — different audience than this repo |
 | Bump **`.claude/VERSION`** | Also bump `plugin/.claude-plugin/plugin.json` `version` and `.claude-plugin/marketplace.json` `metadata.version` (both must match VERSION semver — `tests/test_plugin.sh` enforces), and the README.md version badge (`tests/test_cross_references.sh` enforces). The plugin is pinned by `plugin.json` `version` + the semver `vX.Y.Z` git tag; do NOT run `claude plugin tag` (it creates a redundant `{name}--vX.Y.Z` tag that duplicates the semver tag). |
 

@@ -113,18 +113,42 @@ done
 
 # --agents installs: the kit ships .claude/ paths. Point what was just copied at
 # .agents/ (same rewrite as install.sh). Left alone: ~/.claude/, the vendored
-# ext/ repos, bin/, and lines that already name .agents/ (they handle both modes).
+# ext/ repos, bin/, and lines that already name .agents/ (they handle both modes),
+# plus AGENTS_REWRITE_SKIP — files describing the kit's own repo, not the project.
+AGENTS_REWRITE_SKIP="commands/cleanup.md"
 agents_paths() {
-  local f
+  local f skip
   for f in "$@"; do
+    for skip in $AGENTS_REWRITE_SKIP; do
+      case "$f" in */"$skip") continue 2 ;; esac
+    done
     [ -f "$f" ] && grep -q '\.claude/' "$f" || continue
     sed -E '/\.agents\//!{s#(^|[^[:alnum:]_./~-])\.claude/#\1.agents/#g;s#([$][{]CLAUDE_PROJECT_DIR:-[.][}])/\.claude/#\1/.agents/#g;}' \
       "$f" > "$f.tmp" && cat "$f.tmp" > "$f" && rm -f "$f.tmp"
   done
 }
+# Codex and opencode do not strip HTML comments, so the maintainer notes in
+# CLAUDE-solana.md would reach the model as instructions. Strip them once here:
+# the later diff/cp both read this file and would otherwise always disagree.
+strip_md_comments() {
+  awk '
+    { line = $0; out = ""; blank = (line ~ /^[ \t]*$/)
+      while (1) {
+        if (inc) { p = index(line, "-->"); if (p == 0) { line = ""; break }
+                   line = substr(line, p + 3); inc = 0 }
+        else     { p = index(line, "<!--"); if (p == 0) { out = out line; break }
+                   out = out substr(line, 1, p - 1); line = substr(line, p + 4); inc = 1 }
+      }
+      if (out ~ /[^ \t]/) { print out; prev_blank = 0; next }
+      if (!blank) next
+      if (prev_blank) next
+      print ""; prev_blank = 1 }
+  ' "$1" > "$1.tmp" && cat "$1.tmp" > "$1" && rm -f "$1.tmp"
+}
 INSTR_FILE="CLAUDE.md"
 if [ "$CONFIG_NAME" = ".agents" ]; then
   INSTR_FILE="AGENTS.md"
+  strip_md_comments "$TEMP_DIR/repo/CLAUDE-solana.md"
   agents_paths "$TEMP_DIR/repo/CLAUDE-solana.md" "$TEMP_DIR/repo/.gitmodules"
   if [ "$DRY_RUN" = false ]; then
     while IFS= read -r rel; do agents_paths "$TARGET_DIR/$CONFIG_NAME/$rel"; done < <(
@@ -143,12 +167,20 @@ if [ "$CONFIG_NAME" = ".agents" ]; then
   fi
 fi
 
-# ext/ skills are vendored copies: drop submodule gitfiles copied from the
-# fetched clone whose gitdir doesn't exist here.
+# ext/ skills are vendored copies: drop submodule gitfiles copied from the fetched
+# clone. Keep only a gitfile whose gitdir lives inside this project — that one is a
+# real submodule the user checked out. "Does the gitdir exist?" is not enough: with
+# SOLANA_AI_KIT_LOCAL_SRC the copied path still resolves, into the kit checkout.
 if [ "$DRY_RUN" = false ] && [ -d "$TARGET_DIR/$CONFIG_NAME/skills/ext" ]; then
+  TARGET_ABS="$(cd "$TARGET_DIR" && pwd -P)"
   while IFS= read -r gitfile; do
     gitdir="$(sed -n 's/^gitdir: //p' "$gitfile")"
-    (cd "$(dirname "$gitfile")" && [ -n "$gitdir" ] && [ -d "$gitdir" ]) || rm -f "$gitfile"
+    gitdir_abs=""
+    [ -n "$gitdir" ] && gitdir_abs="$(cd "$(dirname "$gitfile")" && cd "$gitdir" 2>/dev/null && pwd -P || true)"
+    case "$gitdir_abs" in
+      "$TARGET_ABS"/*) ;;
+      *) rm -f "$gitfile" ;;
+    esac
   done < <(find "$TARGET_DIR/$CONFIG_NAME/skills/ext" -name .git -type f)
 fi
 

@@ -74,8 +74,10 @@ install_agents() { bash "$REPO_ROOT/install.sh" --agents "$1" >"$WORK/last.log" 
 # Project-relative .claude/ paths would dangle in an agents-mode install (this mode
 # never creates .claude/). Intentional ones are skipped: ~/.claude/ and $HOME/.claude/
 # (user-global), paths inside the vendored ext/ repos, bin/ (scripts resolve their own
-# dir and read the kit repo's .claude/ layout), and lines that also name .agents/.
+# dir and read the kit repo's .claude/ layout), and commands/cleanup.md, which
+# describes the kit's own repository (install.sh's AGENTS_REWRITE_SKIP).
 CLAUDE_REF='(^|[^[:alnum:]_./~-])\.claude/|CLAUDE_PROJECT_DIR:-[.][}]/\.claude/'
+CLAUDE_REF_EXEMPT='/commands/cleanup\.md:'
 dangling_claude_refs() {
   local d="$1"
   {
@@ -83,8 +85,24 @@ dangling_claude_refs() {
       "$d/.agents" "$d/AGENTS.md" "$d/.gitmodules" 2>/dev/null || true
     sed -n '/>>> solana-ai-kit config/,/<<< solana-ai-kit config/p' "$d/.gitignore" 2>/dev/null \
       | grep '\.claude' || true
-  } | grep -v '\.agents/' || true
+  } | grep -vE "$CLAUDE_REF_EXEMPT" | grep -v '\.agents/' || true
 }
+
+# Lines naming BOTH .claude/ and .agents/ are "works in either mode" idioms. The
+# rewrite skips them, so dangling_claude_refs cannot see them and a stale .claude/
+# inside one would pass unnoticed. Pin the files that hold them: a new file here
+# means a new idiom that has to be read and classified by hand.
+both_mode_files() {
+  grep -rlE --exclude-dir=ext --exclude-dir=bin "$CLAUDE_REF" "$1/.agents" 2>/dev/null \
+    | while IFS= read -r f; do
+        grep -qE "$CLAUDE_REF" "$f" && grep -q '\.agents/' "$f" && echo "${f#"$1"/.agents/}"
+      done | LC_ALL=C sort -u || true
+}
+BOTH_MODE_EXPECTED='commands/commit-claude-config.md
+commands/doctor.md
+commands/resync.md
+commands/scaffold.md
+commands/update.md'
 
 # snapshot <dir> [paths...] — checksums of every file (default: whole tree minus .git/)
 snapshot() {
@@ -123,16 +141,41 @@ assert_submodules_under_agents() {
 }
 
 echo "[instruction file + paths]"
-# Generic, not tied to CLAUDE-solana.md's wording: only .claude/ -> .agents/ path rewrites
+# Generic, not tied to CLAUDE-solana.md's wording: the only differences allowed are
+# .claude/ -> .agents/ path rewrites and the removal of HTML comments (Codex and
+# opencode do not strip those, so they would reach the model as instructions).
+strip_comments_norm() {
+  awk '
+    { line = $0; out = ""; blank = (line ~ /^[ \t]*$/)
+      while (1) {
+        if (inc) { p = index(line, "-->"); if (p == 0) { line = ""; break }
+                   line = substr(line, p + 3); inc = 0 }
+        else     { p = index(line, "<!--"); if (p == 0) { out = out line; break }
+                   out = out substr(line, 1, p - 1); line = substr(line, p + 4); inc = 1 }
+      }
+      if (out ~ /[^ \t]/) { print out; prev_blank = 0; next }
+      if (!blank) next
+      if (prev_blank) next
+      print ""; prev_blank = 1 }
+  ' "$1"
+}
 sed 's#\.agents/#.claude/#g' "$TEMP_DIR/AGENTS.md" > "$WORK/agents-md.norm" 2>/dev/null || true
-sed 's#\.agents/#.claude/#g' "$REPO_ROOT/CLAUDE-solana.md" > "$WORK/claude-solana-md.norm"
+strip_comments_norm "$REPO_ROOT/CLAUDE-solana.md" | sed 's#\.agents/#.claude/#g' > "$WORK/claude-solana-md.norm"
 assert_cmd_success "cmp -s '$WORK/agents-md.norm' '$WORK/claude-solana-md.norm'" \
-  "AGENTS.md is CLAUDE-solana.md with only .claude/ -> .agents/ path changes"
+  "AGENTS.md is CLAUDE-solana.md with only path rewrites and comments stripped"
+assert_eq "" "$(grep -n '<!--\|-->' "$TEMP_DIR/AGENTS.md" || true)" \
+  "AGENTS.md carries no HTML comments (Codex reads them as instructions)"
 assert_eq "" "$(grep -nE "$CLAUDE_REF" "$TEMP_DIR/AGENTS.md" | grep -v '\.agents/' || true)" \
   "AGENTS.md has no dangling .claude/ path"
 assert_eq "AGENTS.md" "$(sed -n '/>>> solana-ai-kit config/,/<<< solana-ai-kit config/p' "$TEMP_DIR/.gitignore" | grep -x 'AGENTS.md' || true)" \
   ".gitignore config block lists AGENTS.md"
 assert_no_dangling_refs "$TEMP_DIR" "no dangling .claude/ references in the installed tree"
+assert_eq "$BOTH_MODE_EXPECTED" "$(both_mode_files "$TEMP_DIR")" \
+  "only the known both-mode files keep a .claude/ path (new ones need classifying)"
+assert_contains "$(cat "$TEMP_DIR/.agents/commands/cleanup.md")" ".claude/CHANGELOG.md" \
+  "cleanup.md keeps .claude/ paths: it describes the kit repo, not the install"
+assert_contains "$(cat "$TEMP_DIR/.agents/commands/commit-claude-config.md")" 'INSTR_FILE' \
+  "/commit-claude-config resolves the instruction file so it stages AGENTS.md"
 assert_submodules_under_agents "$TEMP_DIR" "fresh install"
 
 # ── Idempotent re-install ───────────────────────────────────────────────────

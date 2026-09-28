@@ -112,16 +112,46 @@ fi
 # mode never creates. Left alone: ~/.claude/ (user-global), paths inside the
 # vendored ext/ repos, bin/ (scripts resolve their own dir), and lines that
 # already name .agents/ (those are written to handle both modes).
+#
+# AGENTS_REWRITE_SKIP lists files whose .claude/ paths describe the kit's own
+# repository rather than the installed project, so rewriting them makes them
+# false. /cleanup turns a fork of the kit into a project, and a fork's config
+# dir is always .claude/ whatever mode the user later installs in.
+AGENTS_REWRITE_SKIP="commands/cleanup.md"
 agents_paths() {
-  local f
+  local f skip
   for f in "$@"; do
+    for skip in $AGENTS_REWRITE_SKIP; do
+      case "$f" in */"$skip") continue 2 ;; esac
+    done
     [ -f "$f" ] && grep -q '\.claude/' "$f" || continue
     sed -E '/\.agents\//!{s#(^|[^[:alnum:]_./~-])\.claude/#\1.agents/#g;s#([$][{]CLAUDE_PROJECT_DIR:-[.][}])/\.claude/#\1/.agents/#g;}' \
       "$f" > "$f.tmp" && cat "$f.tmp" > "$f" && rm -f "$f.tmp"
   done
 }
+# Claude Code strips HTML comments before the model sees them; Codex and opencode
+# do not, so the maintainer notes in CLAUDE-solana.md would reach the model as
+# instructions on every request. Strip them from the AGENTS.md source instead.
+# Transform once, here: the later cmp/cp both read this file, so a mismatch
+# would otherwise make every run look like a user edit.
+strip_md_comments() {
+  awk '
+    { line = $0; out = ""; blank = (line ~ /^[ \t]*$/)
+      while (1) {
+        if (inc) { p = index(line, "-->"); if (p == 0) { line = ""; break }
+                   line = substr(line, p + 3); inc = 0 }
+        else     { p = index(line, "<!--"); if (p == 0) { out = out line; break }
+                   out = out substr(line, 1, p - 1); line = substr(line, p + 4); inc = 1 }
+      }
+      if (out ~ /[^ \t]/) { print out; prev_blank = 0; next }
+      if (!blank) next
+      if (prev_blank) next
+      print ""; prev_blank = 1 }
+  ' "$1" > "$1.tmp" && cat "$1.tmp" > "$1" && rm -f "$1.tmp"
+}
 if [ "$AGENTS_ONLY" = true ]; then
   R="$TEMP_DIR/repo"
+  strip_md_comments "$R/CLAUDE-solana.md"
   agents_paths "$R/CLAUDE-solana.md" "$R/.gitmodules" "$R/.claude/settings.json"
   while IFS= read -r f; do agents_paths "$f"; done < <(
     find "$R/.claude/agents" "$R/.claude/commands" "$R/.claude/rules" "$R/.claude/skills" \
@@ -146,11 +176,20 @@ for dir in agents skills rules commands bin; do
   fi
 done
 
-# Older installs also copied the ext/ submodule gitfiles: drop any whose gitdir doesn't exist here
+# Older installs also copied the ext/ submodule gitfiles. Keep only a gitfile whose
+# gitdir lives inside this project (a real submodule the user checked out); a copied
+# one points outside, and with a local source it still resolves, so existence alone
+# is not enough of a test.
 if [ -d "$TARGET_DIR/$CONFIG_DIR/skills/ext" ]; then
+  TARGET_ABS="$(cd "$TARGET_DIR" && pwd -P)"
   while IFS= read -r gitfile; do
     gitdir="$(sed -n 's/^gitdir: //p' "$gitfile")"
-    (cd "$(dirname "$gitfile")" && [ -n "$gitdir" ] && [ -d "$gitdir" ]) || rm -f "$gitfile"
+    gitdir_abs=""
+    [ -n "$gitdir" ] && gitdir_abs="$(cd "$(dirname "$gitfile")" && cd "$gitdir" 2>/dev/null && pwd -P || true)"
+    case "$gitdir_abs" in
+      "$TARGET_ABS"/*) ;;
+      *) rm -f "$gitfile" ;;
+    esac
   done < <(find "$TARGET_DIR/$CONFIG_DIR/skills/ext" -name .git -type f)
 fi
 
