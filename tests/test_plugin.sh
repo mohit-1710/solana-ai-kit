@@ -51,6 +51,32 @@ for link in agents commands .mcp.json VERSION \
   fi
 done
 
+# --- Plugin hooks (real file, mirrors .claude/settings.json hooks) ---
+echo "[plugin hooks]"
+PLUGIN_HOOKS="$PLUGIN_DIR/hooks/hooks.json"
+assert_file_exists "$PLUGIN_HOOKS" "plugin hooks.json exists"
+assert_json_valid "$PLUGIN_HOOKS" "plugin hooks.json is valid JSON"
+assert_file_contains "$PLUGIN_HOOKS" "config/solana/id" "plugin hooks.json has the secrets-gate PreToolUse hook"
+assert_file_contains "$PLUGIN_HOOKS" "Blocked: reading private keys" "plugin secrets gate prints the block reason"
+assert_file_contains "$PLUGIN_HOOKS" "exit 2" "plugin secrets gate blocks with exit 2"
+for legacy in '"when"' command_matches CLAUDE_FILE_PATH CLAUDE_TOOL_EXIT_CODE CLAUDE_SUBAGENT_NAME; do
+  assert_file_not_contains "$PLUGIN_HOOKS" "$legacy" "plugin hooks.json has no unsupported '$legacy'"
+done
+
+# --- plugin.json must not redeclare the auto-discovered default hooks path (issue #50: duplicate load error) ---
+# Claude Code auto-loads hooks/hooks.json from the plugin root; a manifest "hooks" entry
+# pointing at that same default path registers it twice and plugin installs fail with
+# "1 error during load". The manifest field is only for additional/custom-path hook files.
+MANIFEST_HOOKS_FIELD="$(python3 -c "import json; print(json.load(open('$PLUGIN_MANIFEST')).get('hooks', ''))" 2>/dev/null)"
+TOTAL=$((TOTAL + 1))
+if [ "$MANIFEST_HOOKS_FIELD" != "./hooks/hooks.json" ]; then
+  echo "  PASS: plugin.json does not redeclare the default ./hooks/hooks.json path"
+  PASS=$((PASS + 1))
+else
+  echo "  FAIL: plugin.json 'hooks' field redeclares the auto-discovered ./hooks/hooks.json path (duplicate load error)"
+  FAIL=$((FAIL + 1))
+fi
+
 # --- Plugin-variant hub must not link into ext/ (submodules absent in plugin installs) ---
 echo "[variant hub]"
 assert_file_exists "$PLUGIN_HUB" "plugin-variant skills hub exists"
@@ -61,5 +87,7 @@ echo "[version coherence]"
 KIT_VERSION="$(grep -oE '[0-9]+\.[0-9]+\.[0-9]+' "$REPO_ROOT/.claude/VERSION" | head -1)"
 PLUGIN_VERSION="$(python3 -c "import json; print(json.load(open('$PLUGIN_MANIFEST'))['version'])" 2>/dev/null)"
 assert_eq "$KIT_VERSION" "$PLUGIN_VERSION" "plugin.json version ($PLUGIN_VERSION) matches .claude/VERSION ($KIT_VERSION)"
+MARKETPLACE_VERSION="$(python3 -c "import json; print(json.load(open('$MARKETPLACE'))['metadata']['version'])" 2>/dev/null)"
+assert_eq "$KIT_VERSION" "$MARKETPLACE_VERSION" "marketplace.json metadata.version ($MARKETPLACE_VERSION) matches .claude/VERSION ($KIT_VERSION)"
 
 print_summary

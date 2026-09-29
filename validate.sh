@@ -26,19 +26,21 @@ echo ""
 echo "[Agents]"
 for f in .claude/agents/*.md; do
   name="$(basename "$f")"
-  has_name=1; has_desc=1; has_model=1
+  has_name=1; has_desc=1; model_ok=1
 
   # Check for frontmatter block
   if head -1 "$f" | grep -q "^---"; then
     frontmatter="$(awk '/^---$/{c++;next} c==1{print; if(NR>22)exit}' "$f")"
     echo "$frontmatter" | grep -q "^name:" && has_name=0
     echo "$frontmatter" | grep -q "^description:" && has_desc=0
-    echo "$frontmatter" | grep -q "^model:" && has_model=0
+    # model: is optional (omitted = inherit the session model); never hardcode fable
+    echo "$frontmatter" | grep -q "^model:" || model_ok=0
+    echo "$frontmatter" | grep -qE "^model:[[:space:]]*(opus|sonnet|haiku|inherit)[[:space:]]*$" && model_ok=0
   fi
 
   check "$name has name:" $has_name
   check "$name has description:" $has_desc
-  check "$name has model:" $has_model
+  check "$name model: omitted or opus|sonnet|haiku|inherit" $model_ok
 done
 echo ""
 
@@ -55,6 +57,33 @@ for f in .claude/commands/*.md; do
 
   check "$name has description:" $has_desc
 done
+echo ""
+
+# --- Description budget ---
+# Agent and command descriptions are listed to the model in every session, so keep
+# them to routing essentials. Bodies load only when used.
+echo "[Descriptions]"
+long_desc=0
+while IFS=$'\t' read -r len limit file; do
+  if [ "$len" -gt "$limit" ]; then
+    echo "  FAIL: $file description is $len chars (limit $limit)"
+    FAIL=$((FAIL + 1))
+    long_desc=$((long_desc + 1))
+  fi
+done < <(python3 - <<'PY'
+import glob, re
+for pattern, limit in ((".claude/agents/*.md", 250), (".claude/commands/*.md", 100)):
+    for path in sorted(glob.glob(pattern)):
+        text = open(path, encoding="utf-8").read()
+        front = text.split("\n---", 1)[0] if text.startswith("---") else ""
+        m = re.search(r"^description:\s*(.*)$", front, re.M)
+        desc = m.group(1).strip().strip("\"'") if m else ""
+        print(f"{len(desc)}\t{limit}\t{path}")
+PY
+)
+if [ "$long_desc" -eq 0 ]; then
+  check "Agent descriptions <= 250 chars, command descriptions <= 100 chars" 0
+fi
 echo ""
 
 # --- Skill references ---
@@ -152,20 +181,47 @@ if [ -f .mcp.json ]; then
 fi
 echo ""
 
+# --- Session behavior stays with the user ---
+# settings.json ships the security policy and attribution. These keys pinned behavior
+# for every user (effort, experimental modes, LSP plugins, MCP auto-approval) or were
+# dead; update.sh strips them from older installs.
+echo "[Settings]"
+retired_keys="$(python3 -c 'import json
+d = json.load(open(".claude/settings.json"))
+env = d.get("env") or {}
+plugins = d.get("enabledPlugins") or {}
+keys = [k for k in ("enableAllProjectMcpServers", "defaultMode", "modelDefaults") if k in d]
+keys += ["env." + k for k in ("CLAUDE_CODE_EFFORT_LEVEL", "CLAUDE_CODE_COORDINATOR_MODE",
+         "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS", "BASH_MAX_OUTPUT_LENGTH", "MAX_MCP_OUTPUT_TOKENS") if k in env]
+keys += ["enabledPlugins." + p for p in plugins if p.split("@")[0] in ("rust-analyzer-lsp", "typescript-lsp", "csharp-lsp")]
+print(" ".join(keys))' 2>/dev/null || true)"
+if [ -z "$retired_keys" ]; then
+  check "settings.json pins no session behavior (effort, env toggles, LSP plugins, MCP auto-approval)" 0
+else
+  echo "  FAIL: settings.json sets $retired_keys; leave these to the user (.claude/settings.local.json)"
+  FAIL=$((FAIL + 1))
+fi
+echo ""
+
 # --- Rules frontmatter ---
+# Claude Code reads only `paths:` from a rule. A rule without it (including one
+# that uses `globs:`) loads into every session and every subagent.
 echo "[Rules]"
-for f in .claude/rules/*.md; do
-  name="$(basename "$f")"
-  has_globs=1
-
-  if head -1 "$f" | grep -q "^---"; then
-    frontmatter="$(awk '/^---$/{c++;next} c==1{print; if(NR>22)exit}' "$f")"
-    # Accept either globs: or paths:
-    (echo "$frontmatter" | grep -qE "^(globs|paths):") && has_globs=0
+eager_rules=0
+while IFS= read -r f; do
+  frontmatter=""
+  if head -1 "$f" | grep -q "^---$"; then
+    frontmatter="$(awk '/^---$/{c++;next} c==1{print}' "$f")"
   fi
-
-  check "$name has globs/paths in frontmatter" $has_globs
-done
+  if ! echo "$frontmatter" | grep -q "^paths:"; then
+    echo "  FAIL: $f has no paths: frontmatter, so it loads every session"
+    FAIL=$((FAIL + 1))
+    eager_rules=$((eager_rules + 1))
+  fi
+done < <(find .claude/rules -name '*.md' 2>/dev/null)
+if [ "$eager_rules" -eq 0 ]; then
+  check "No always-loaded rules (every rule is path-scoped with paths:)" 0
+fi
 echo ""
 
 # --- Summary ---

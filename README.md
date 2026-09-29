@@ -2,8 +2,8 @@
 
 # Solana AI Kit
 
-[![CI](https://github.com/solanabr/solana-ai-kit/actions/workflows/ci.yml/badge.svg)](https://github.com/solanabr/solana-ai-kit/actions/workflows/ci.yml)
-![Version](https://img.shields.io/badge/version-2.0.0-blue)
+[![CI](https://github.com/solanabr/ai-kit/actions/workflows/ci.yml/badge.svg)](https://github.com/solanabr/ai-kit/actions/workflows/ci.yml)
+![Version](https://img.shields.io/badge/version-2.1.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Solana](https://img.shields.io/badge/Solana-black?logo=solana)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-powered-orange)
@@ -11,7 +11,7 @@
 Production-ready Claude Code configuration for full-stack Solana development. Combines best practices from multiple sources into an agent-optimized, token-efficient config you can install and adapt to your specific project.
 
 The idea here is to provide a generic CLAUDE.md that relies on subagents to plan and execute actions, dynamically loading markdown files, saving tokens and context in the end of the day. This config fully leverages the official Claude Code config recommendations:
-- Rules are only loaded whenever specific file types are involved;
+- Nothing loads up front except a small CLAUDE.md and one-line agent/command descriptions; agent, command and skill bodies load only when used;
 - SKILL.md is a mega hub to dynamically-disclosed skill files that are directly fetched from the best skill repos distributed across the ecosystem (Solana Foundation, Colosseum, Solana Mobile, SendAI, etc);
 - Plus, its CLAUDE-solana.md is than half the size of the usual CLAUDE.md, leaving space for its self improvements programmed into the agents, noting and learning from anti-patterns, errors, recurrency and more. For less important notes, CLAUDE.local.md is constantly maintained by agents as well and, on monorepos, per-folder CLAUDE.md is also maintained.
 
@@ -25,10 +25,10 @@ A complete `.claude/` configuration that turns Claude into a Solana development 
 
 - **15 specialized agents** for different tasks (architecture, Anchor, Pinocchio, DeFi, tokens, frontend, mobile, backend, DevOps, QA, docs, games, Unity, learning, research)
 - **30 workflow commands** for building, testing, deploying, profiling, migrating, and committing
-- **7 MCP server integrations** for on-chain data (Helius), Solana docs (solana-dev), library docs (Context7), browser automation (Playwright), context optimization (context-mode), persistent memory (memsearch), and local-validator / mainnet-fork control (Surfpool)
-- **Agent teams** for multi-step workflows (architect → engineer → QA)
+- **3 MCP servers** on by default for on-chain data (Helius), Solana docs (solana-dev) and library docs (Context7), plus opt-in browser automation (Playwright), local-validator / mainnet-fork control (Surfpool) and context optimization (context-mode)
+- **Agent teams** (opt-in, experimental) for multi-step workflows (architect → engineer → QA)
 - **Progressive skill loading** that only loads context when needed (saves tokens)
-- **Auto-loading rules** that enforce best practices based on file patterns
+- **A small always-on CLAUDE.md** carrying only the program-code house rules and workflow; everything else is on demand
 
 ## Quick Start
 
@@ -39,24 +39,24 @@ claude -m "/cleanup"  # then start claude code running /cleanup so top-level dir
 
 # Option 1: One-liner installer (Claude Code)
 curl -fsSL https://aikit.superteam.codes | bash
-# Fallback (or before the aikit.superteam.codes DNS is live): curl -fsSL https://raw.githubusercontent.com/solanabr/solana-ai-kit/main/install.sh | bash
+# Fallback (or before the aikit.superteam.codes DNS is live): curl -fsSL https://raw.githubusercontent.com/solanabr/ai-kit/main/install.sh | bash
 
 # Option 2: One-liner installer (Codex, Opencode, everything else)
 curl -fsSL https://aikit.superteam.codes | bash -s -- --agents
-# Fallback (or before the aikit.superteam.codes DNS is live): curl -fsSL https://raw.githubusercontent.com/solanabr/solana-ai-kit/main/install.sh | bash -s -- --agents
+# Fallback (or before the aikit.superteam.codes DNS is live): curl -fsSL https://raw.githubusercontent.com/solanabr/ai-kit/main/install.sh | bash -s -- --agents
 
 # Option 3: Manual setup
-git clone --recurse-submodules https://github.com/solanabr/solana-ai-kit.git
+git clone --recurse-submodules https://github.com/solanabr/ai-kit.git
 cp -r solana-ai-kit/.claude /path/to/your-project/
 cp solana-ai-kit/CLAUDE-solana.md /path/to/your-project/CLAUDE.md
 cd /path/to/your-project && git submodule update --init --recursive
 
 # Option 4: Claude Code plugin (run inside Claude Code)
-/plugin marketplace add solanabr/solana-ai-kit
+/plugin marketplace add https://github.com/solanabr/ai-kit.git
 /plugin install solana-ai-kit@stbr
 # Commands then namespace as /solana-ai-kit:<name>. The plugin is the CORE kit
 # (agents/commands/local skills/MCP/hooks); the curl one-liner (Option 1) is the
-# FULL install, adding rules + permissions/sandbox + the 19 ext/ submodules.
+# FULL install, adding CLAUDE.md + permissions/sandbox + the 18 ext/ submodules.
 # Details: see "Install as a Claude Code plugin" below.
 
 # Start Claude Code
@@ -65,7 +65,7 @@ claude
 
 ### `--agents` Flag
 
-Pass `--agents` to install everything into `.agents/` instead of `.claude/`. Same content, different directory name. Useful when `.claude/` is already taken or for non-Claude AI tools (Cursor, Windsurf, Copilot, etc.).
+Pass `--agents` to install everything into `.agents/` instead of `.claude/`, with the instructions in `AGENTS.md` instead of `CLAUDE.md`. Codex and opencode read `AGENTS.md` and the skills in `.agents/skills/`, and the installed files point at `.agents/` paths. Useful when `.claude/` is already taken or for non-Claude AI tools. `.agents/agents/`, `.agents/commands/` and `.mcp.json` keep Claude Code's format, so other tools can use them as prompts or context.
 
 ```bash
 bash install.sh --agents /path/to/your-project
@@ -93,22 +93,22 @@ After installation, configure MCP servers for enhanced capabilities:
 /setup-mcp
 ```
 
-This guides you through API key configuration for Helius, Context7, and other MCP servers.
+This guides you through the Helius API key and offers the [optional MCP servers](#optional-mcp-servers).
 
 ## Install as a Claude Code plugin
 
 solana-ai-kit is also its own Claude Code marketplace serving one **core plugin**. From inside Claude Code:
 
 ```text
-/plugin marketplace add solanabr/solana-ai-kit
+/plugin marketplace add https://github.com/solanabr/ai-kit.git
 /plugin install solana-ai-kit@stbr
 ```
 
-The plugin ships the **core kit**: the 15 agents, 30 commands, the local go-to-market + registry skills (idea-sprint, pitch-deck, hackathon), the 7 MCP servers, and the dev hooks (banner, formatter, pre-deploy/commit gates). Commands and skills are namespaced — `/deploy` becomes `/solana-ai-kit:deploy`.
+The plugin ships the **core kit**: the 15 agents, 30 commands, the local go-to-market + registry skills (idea-sprint, pitch-deck, hackathon), the 3 default MCP servers, and the dev hooks (banner, formatter, pre-deploy/commit gates). Commands and skills are namespaced — `/deploy` becomes `/solana-ai-kit:deploy`.
 
 What the plugin **cannot** carry (Claude Code plugins are plain git clones — they can't init submodules or ship a permissions/sandbox policy), so these stay exclusive to the **full install** (`install.sh`):
 
-- the lazy-loaded `.claude/rules/*` code-style law (Rust, Anchor, Pinocchio, TypeScript, .NET)
+- the project `CLAUDE.md` with the program-code house rules
 - the curated permissions allowlist + sandbox policy
 - the 18 `ext/` skill submodules (protocol, security, infra, ecosystem depth)
 
@@ -150,7 +150,13 @@ Each agent loads its own specialized context on invocation:
 "Use solana-qa-engineer to write comprehensive tests"
 ```
 
-Claude will spawn each specialized agent by itself based on context and, with `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` enabled, orchestrate multi-agent workflows:
+Claude will spawn each specialized agent by itself based on context. Agent teams, where several Claude sessions share a task list and message each other, are an experimental Claude Code feature that is off by default, and the kit leaves it off: while it is on, a subagent Claude names can launch as a teammate, which costs more tokens. To opt in, add this to `.claude/settings.local.json`:
+
+```json
+{ "env": { "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1" } }
+```
+
+Then ask for a team:
 
 ```
 "Create an agent team: solana-architect for design, anchor-engineer for implementation, solana-qa-engineer for testing"
@@ -164,29 +170,50 @@ Recommended team patterns:
 | **full-stack** | architect → anchor → frontend → qa | End-to-end feature |
 | **audit-and-fix** | qa → trailofbits context → anchor | Audit and remediate |
 | **game-ship** | game-architect → unity → qa | Game feature |
+| **research-and-build** | researcher → architect → anchor/pinocchio | Investigate a protocol or pattern, then design and implement |
 | **defi-compose** | researcher → defi-engineer → qa | DeFi integration |
 | **token-launch** | token-engineer → frontend → qa | Token creation + launch UI |
 
 ### MCP Server Integrations
 
-Pre-configured MCP servers in `.mcp.json` (API keys go in `.env`):
+On by default in `.mcp.json` (API keys go in `.env`). Claude Code asks once per project before it starts them, so approve the ones you want:
 
 | Server | Capabilities |
 |--------|-------------|
-| **Helius** | 60+ tools: RPC, DAS API, webhooks, priority fees, token metadata, NFT data |
-| **solana-dev** | Solana Foundation official MCP — Solana docs, guides, and API references |
+| **Helius** | RPC, DAS API, parsed transactions, webhooks, priority fees, token and NFT data |
+| **solana-dev** | Solana Foundation official MCP (remote HTTP): Solana docs, guides, and API references |
 | **Context7** | Up-to-date library documentation lookup |
-| **Playwright** | Browser automation for dApp testing and visual verification |
-| **context-mode** | Context window optimization — compresses large RPC responses, build logs, and code analysis |
-| **memsearch** | Persistent AI memory across sessions — auto-captures summaries, semantic search, git-friendly storage |
-| **Surfpool** | Agent-driven local validator / mainnet-fork control via the Surfpool CLI — `surfpool mcp` (requires the surfpool CLI) |
+
+#### Optional MCP servers
+
+These need a browser, a CLI or a workflow choice, so they are not started by default. Add one for yourself with `claude mcp add` (add `--scope project` to share it through `.mcp.json`):
+
+| Server | Add with | Needs |
+|--------|----------|-------|
+| **Playwright**: browser automation for dApp testing | `claude mcp add playwright -- npx -y @playwright/mcp@latest --headless` | A browser Playwright can launch |
+| **Surfpool**: local validator / mainnet-fork control | `claude mcp add surfpool -- surfpool mcp` | The `surfpool` CLI (`brew install txtx/taps/surfpool`) |
+| **context-mode**: keeps large tool output out of context | `claude mcp add context-mode -- npx -y context-mode@latest` | Nothing |
+
+The kit used to list `memsearch` too, but its `memsearch-mcp` package is not published on npm, so it never started. For persistent memory, Zilliz ships memsearch as a plugin: `/plugin marketplace add zilliztech/memsearch`, then `/plugin install memsearch`.
+
+#### Settings the kit leaves to you
+
+`.claude/settings.json` ships the sandbox, permission rules, hooks and attribution, and nothing that pins how Claude works. Turn these on yourself with the command shown or in `.claude/settings.local.json`, which `/update` never touches:
+
+- **Effort**: `/effort` (the kit no longer forces `max`)
+- **Agent teams**: `{"env": {"CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"}}`, see [Agent Teams](#agent-teams)
+- **Code intelligence**: install the language server, then `/plugin install rust-analyzer-lsp@claude-plugins-official` (or `typescript-lsp`, `csharp-lsp`). Claude Code offers the matching plugin once the server is on your `PATH`
+- **MCP auto-approval**: `"enableAllProjectMcpServers": true` skips the approval prompt for every server in `.mcp.json`
+
+`/update` removes these keys and the retired MCP servers from files written by kit 2.1.0 or earlier, but only where they still hold the kit's value.
 
 ### Token-Efficient Design
 
 - CLAUDE.md is delivered as a user message (not system prompt) — shorter = better adherence
 - Skills load progressively (not all at once)
 - Agents reference skills instead of duplicating content
-- Path-scoped rules lazy-load on file read (zero startup cost)
+- No always-loaded rules: Claude Code reads only `paths:` from a rule file and loads anything else every session, so the kit ships no rules and `validate.sh` fails on an unscoped one
+- Agent and command descriptions are listed in every session, so they stay one or two sentences
 - `CLAUDE.local.md` for private scratch notes (gitignored, never shared)
 - Subdirectory CLAUDE.md files lazy-load in monorepos
 - Decision frameworks live in agents, not global context
@@ -203,7 +230,7 @@ Pre-configured MCP servers in `.mcp.json` (API keys go in `.env`):
 | Backend | Axum 0.8+, Tokio 1.40+, sqlx |
 | Unity Games | Solana.Unity-SDK, .NET 9, C# 13 |
 | PlaySolana | PSG1 console, PlayDex, SvalGuard |
-| DeFi | Jupiter, Drift, Kamino, Raydium, Orca, Meteora |
+| DeFi | Jupiter, Kamino, Raydium, Orca, Meteora |
 | Infrastructure | Cloudflare Workers, GitHub Actions, Docker |
 
 ## Extended Skills & Add-on Registry
@@ -239,10 +266,11 @@ See [`skill-registry.json`](.claude/skills/skill-registry.json) for the complete
 ├── tests/                       # Config integrity test suite
 ├── .github/workflows/
 │   ├── ci.yml                       # PR validation
-│   ├── claude-code.yml              # Claude Code action template
 │   └── claude.yml                   # @claude mention responder (issues/PRs)
+├── .github/templates/
+│   └── claude-code.yml              # Claude Code action template (copy into a project's own workflows/)
 └── .claude/
-    ├── VERSION                  # Semver version (e.g. 2.0.0)
+    ├── VERSION                  # Semver version (e.g. 2.1.0)
     ├── agents/                  # 15 specialized agents
     ├── bin/
     │   ├── update.sh                # In-place update from upstream
@@ -276,29 +304,30 @@ See [`skill-registry.json`](.claude/skills/skill-registry.json) for the complete
     │   ├── token-2022.md            # Token Extensions guide (local)
     │   ├── backend-async.md         # Axum/Tokio patterns (local)
     │   └── deployment.md            # Deployment workflows (local)
-    ├── rules/                   # Auto-loading constraints
-    └── settings.json            # Permissions, hooks, agent teams
+    └── settings.json            # Sandbox, permissions, hooks
 ```
 
 ## Agents
 
 | Agent | Purpose | Model |
 |-------|---------|-------|
-| **solana-architect** | System design, PDA schemes, token economics, multi-program architecture | Opus |
+| **solana-architect** | System design, PDA schemes, token economics, multi-program architecture | Inherit |
 | **anchor-engineer** | Anchor development, IDL generation, account constraints | Opus |
-| **pinocchio-engineer** | CU optimization (80-95% savings), zero-copy, minimal binary | Opus |
-| **defi-engineer** | DeFi integrations: Jupiter, Drift, Kamino, Raydium, Orca, Meteora | Opus |
+| **pinocchio-engineer** | CU optimization (80-95% savings), zero-copy, minimal binary | Inherit |
+| **defi-engineer** | DeFi integrations: Jupiter, Kamino, Raydium, Orca, Meteora | Opus |
 | **token-engineer** | Token-2022 extensions, token economics, launch mechanics | Opus |
-| **solana-frontend-engineer** | React/Next.js, wallet UX, transaction flows, accessibility | Opus |
+| **solana-frontend-engineer** | React/Next.js, wallet UX, transaction flows, accessibility | Sonnet |
 | **mobile-engineer** | React Native/Expo, mobile wallet adapter, deep linking | Sonnet |
-| **rust-backend-engineer** | Axum APIs, indexers, WebSocket services | Opus |
+| **rust-backend-engineer** | Axum APIs, indexers, WebSocket services | Sonnet |
 | **devops-engineer** | CI/CD, monitoring, RPC infrastructure, Cloudflare Workers | Sonnet |
 | **solana-qa-engineer** | Testing (Mollusk/LiteSVM/Trident), CU profiling, code quality | Opus |
 | **tech-docs-writer** | READMEs, API docs, integration guides | Sonnet |
-| **game-architect** | Solana game design, Unity architecture, on-chain game state, PlaySolana | Opus |
+| **game-architect** | Solana game design, Unity architecture, on-chain game state, PlaySolana | Inherit |
 | **unity-engineer** | Unity/C# implementation, Solana.Unity-SDK, wallet integration, NFT display | Sonnet |
 | **solana-guide** | Learning, tutorials, concept explanations, progressive learning paths | Sonnet |
 | **solana-researcher** | Ecosystem research, protocol investigation, SDK analysis | Sonnet |
+
+**Model routing:** `Opus` for deep reasoning where Opus is the right fit; `Sonnet` for implementation-heavy, mechanical, docs or high-volume work; `Inherit` means no `model:` line, so the agent runs on your session model (architecture and unsafe low-level code get the strongest model you run, Fable included). The kit never pins `fable`. Commands inherit your session model too, except `/doctor`, `/setup-mcp`, `/resync`, `/update`, `/cleanup`, `/commit-claude-config` and `/scaffold`, which run on Sonnet for that turn. `CLAUDE_CODE_SUBAGENT_MODEL` in your settings `env` sets the model for `Inherit` agents; add `CLAUDE_CODE_SUBAGENT_MODEL_FORCE=1` to apply it to every agent.
 
 ## Commands
 
@@ -359,10 +388,10 @@ See [`skill-registry.json`](.claude/skills/skill-registry.json) for the complete
 
 ## GitHub Action for Team Collaboration
 
-This config includes a pre-built GitHub Action (`.github/workflows/claude-code.yml`) for PR-based iteration:
+This config includes a pre-built GitHub Action (`.github/templates/claude-code.yml`) for PR-based iteration:
 
 1. Add `ANTHROPIC_API_KEY` to your repository secrets
-2. Copy `.github/workflows/claude-code.yml` to your project
+2. Copy `.github/templates/claude-code.yml` to `.github/workflows/claude-code.yml` in your project
 3. Team members can `@claude` in PR comments
 4. Claude responds with code suggestions using this configuration
 

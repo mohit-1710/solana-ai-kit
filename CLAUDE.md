@@ -10,24 +10,26 @@ This repository contains Claude Code configuration for Solana development projec
 
 ## This Repo's Purpose
 
-You are maintaining the **solana-ai-kit** repository - a template/library of Claude Code configurations for Solana development. Your role is to improve, test, and maintain the agents, skills, commands, MCP servers, and rules that other projects will use.
+You are maintaining the **solana-ai-kit** repository - a template/library of Claude Code configurations for Solana development. Your role is to improve, test, and maintain the agents, skills, commands, and MCP servers that other projects will use.
 
 ## Token Loading Model
 <!-- WHY: Understanding when each file loads determines your token budget.
      CLAUDE.md is a user message (not system prompt) — shorter = better adherence.
-     Rules without globs: load at session start, so keep them minimal. -->
+     Claude Code reads only `paths:` from a rule; `globs:` is ignored, so such a rule
+     loads at session start and in every subagent (the kit's former rules did: ~17K tokens). -->
 
 | File | When loaded | Budget guidance |
 |------|-------------|-----------------|
-| `CLAUDE.md` | Session start; delivered as user message (uncached) | Keep <200 lines; costs every turn |
-| `CLAUDE-solana.md` | Session start (user projects) | Keep <120 lines; uncached; HTML comments stripped (free) |
+| `CLAUDE.md` | Session start and every subagent; user message (uncached) | Keep <200 lines; costs every turn |
+| `CLAUDE-solana.md` | Session start and every subagent (user projects) | Keep <60 lines; only what a strong model can't infer; HTML comments stripped (free) |
 | `MEMORY.md` | Session start | 200-line / 25KB cap; index pointers only |
-| `.claude/rules/*.md` (with `globs:`) | Lazy — on matching file read | Can be detailed; zero startup cost |
-| `.claude/rules/*.md` (no `globs:`) | Session start | Minimal — always loaded |
-| `.claude/agents/*.md` | On agent spawn | Can be detailed |
-| `.claude/commands/*.md` | On invocation | Can be detailed |
-| `.claude/skills/SKILL.md` | On invocation | Medium; HTML comments NOT stripped |
-| `.claude/skills/*.md` | On-demand via links | Can be detailed |
+| `.claude/rules/*.md` | `paths:` → when Claude reads a matching file; no `paths:` → every session and subagent | Kit ships none; `validate.sh` fails on an unscoped rule |
+| Agent `description` | Every session (Agent tool list) | Routing only, ≤250 chars (`validate.sh`) |
+| Command `description` | Every session (skill listing) unless `disable-model-invocation: true` | One line, ≤100 chars (`validate.sh`); user-only side-effect commands set `disable-model-invocation: true` |
+| `.claude/agents/*.md` body | On agent spawn | Only what the model wouldn't know; link ext/ skills |
+| `.claude/commands/*.md` body | On invocation | Terse steps with the exact non-obvious commands |
+| `.claude/skills/SKILL.md` | When read (not auto-listed: not in a `<name>/` dir; CLAUDE.md points to it) | Routing table; HTML comments NOT stripped |
+| `.claude/skills/*.md` | On-demand via links | Can be detailed; don't duplicate ext/ |
 | Subdirectory `CLAUDE.md` | Lazy — when Claude reads files in that dir | Monorepo module configs |
 
 ## Communication Style
@@ -50,7 +52,8 @@ You are maintaining the **solana-ai-kit** repository - a template/library of Cla
 - Run `bash validate.sh && bash tests/run_all.sh` before every commit
 - Check QUICK-START.md and README.md after any structural change
 - Test install.sh in a temp dir after modifying it
-- Keep CLAUDE-solana.md under 120 lines — it loads on every user conversation
+- Keep CLAUDE-solana.md under 60 lines — it loads in every user session and subagent
+- Write for a strong model: add only what it wouldn't know or would get wrong, link ext/ references instead of pasting patterns, and state rules calmly (no NEVER/ALWAYS/CRITICAL; give the reason)
 
 ## Ripple Map
 <!-- CRITICAL: This is the #1 cause of stale docs. When adding/removing
@@ -62,11 +65,16 @@ When X changes, also update Y:
 |---------|-------------|
 | Add/remove **agent** | README.md agent table + tree count, QUICK-START.md tree count, install.sh output, tests/test_agents.sh + test_install.sh assertions |
 | Add/remove **command** | README.md commands tables + tree count, QUICK-START.md tree count, tests/test_commands.sh + test_install.sh assertions |
+| Change an agent/command **`model:`** | README.md Agents table Model column + routing note (`tests/test_model_routing.sh` enforces allowed values, no Fable, README drift) |
 | Add/remove **MCP server** | README.md MCP table, CLAUDE-solana.md MCP list, QUICK-START.md MCP list, .env.example, .claude/commands/setup-mcp.md |
+| Add/remove **.env.example key** | `.claude/commands/setup-mcp.md` |
 | Add/remove **submodule** | .gitmodules, README.md submodules table + tree, QUICK-START.md tree, .claude/skills/SKILL.md routing |
 | Modify **install.sh** | Test: `bash tests/test_install.sh` in temp dir |
+| Change the **repo URL** | Update everywhere EXCEPT `.claude/bin/update.sh:16` — that line is inside the frozen 1-93 region (see the NOTE at line 94) and editing it breaks self-update for every existing install. GitHub's rename redirect covers it. |
+| Bump the **pinned agent CLIs** (`opencode-ai`, `@openai/codex` in `.github/workflows/ci.yml`) | Re-check that `opencode debug skill` and `codex debug prompt-input` still emit the shape the `agents-mode-clients` job greps — both subcommands are undocumented |
+| Add a **Claude-Code-only** command (describes the kit repo, `/plugin`, or anything `--agents` installs can't do) | Add it to `AGENTS_SKIP_FILES` in `install.sh` + `.claude/bin/update.sh` so it isn't installed there; `tests/test_install_agents_only.sh` asserts the two lists match |
 | Modify **CLAUDE-solana.md** | This ships to ALL user projects — different audience than this repo |
-| Bump **`.claude/VERSION`** | Also bump `plugin/.claude-plugin/plugin.json` `version` (must match VERSION semver — `tests/test_plugin.sh` enforces). The plugin is pinned by `plugin.json` `version` + the semver `vX.Y.Z` git tag; do NOT run `claude plugin tag` (it creates a redundant `{name}--vX.Y.Z` tag that duplicates the semver tag). |
+| Bump **`.claude/VERSION`** | Also bump `plugin/.claude-plugin/plugin.json` `version` and `.claude-plugin/marketplace.json` `metadata.version` (both must match VERSION semver — `tests/test_plugin.sh` enforces), and the README.md version badge (`tests/test_cross_references.sh` enforces). The plugin is pinned by `plugin.json` `version` + the semver `vX.Y.Z` git tag; do NOT run `claude plugin tag` (it creates a redundant `{name}--vX.Y.Z` tag that duplicates the semver tag). |
 
 ## Submodule Pitfalls
 
@@ -78,16 +86,16 @@ When X changes, also update Y:
 
 | Component | Location | Key Rule |
 |-----------|----------|----------|
-| **Agents** | `.claude/agents/` | Non-overlapping responsibilities; spawn other agents for cross-domain work |
+| **Agents** | `.claude/agents/` | Non-overlapping responsibilities; spawn other agents for cross-domain work; description ≤ 2 sentences |
 | **Skills** | `.claude/skills/` | Progressive loading; reference from `SKILL.md`; prefer code over prose |
-| **Commands** | `.claude/commands/` | Atomic (one command, one purpose); document inputs/outputs |
-| **Rules** | `.claude/rules/` | Minimal — they load on every matching file; use `globs` in frontmatter |
+| **Commands** | `.claude/commands/` | Atomic (one command, one purpose); document inputs/outputs; one-line description |
+| **Rules** | `.claude/rules/` | The kit ships none. A project rule needs `paths:` frontmatter (`globs:` is ignored, so the rule loads every session) |
 | **MCP Servers** | `.mcp.json` | Document env vars; test connectivity; update setup-mcp command |
-| **Plugin** | `.claude-plugin/marketplace.json` + `plugin/` | In-repo marketplace + symlinked core-plugin subtree (agents/commands/.mcp.json/local skills are **symlinks** into `.claude/`; only `hooks/hooks.json` + plugin-variant `skills/SKILL.md` are real files). Keep `plugin.json` version = `.claude/VERSION`. `plugin/skills/SKILL.md` must have NO `ext/` links (submodules absent in plugin installs). Validate: `claude plugin validate .` + `./plugin`. `install.sh` stays the full install (rules/permissions/submodules) |
+| **Plugin** | `.claude-plugin/marketplace.json` + `plugin/` | In-repo marketplace + symlinked core-plugin subtree (agents/commands/.mcp.json/local skills are **symlinks** into `.claude/`; only `hooks/hooks.json` + plugin-variant `skills/SKILL.md` are real files). Keep `plugin.json` version = `.claude/VERSION`. `plugin/skills/SKILL.md` must have NO `ext/` links (submodules absent in plugin installs). Validate: `claude plugin validate .` + `./plugin`. `install.sh` stays the full install (CLAUDE.md/permissions/submodules) |
 
 ## Agent Teams
 
-Teams are dynamic — created via natural language, not static config (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` enabled in settings.json). See README.md for recommended team patterns.
+Teams are dynamic — created via natural language, not static config. They are an experimental Claude Code feature the kit leaves off; users opt in with `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` in `.claude/settings.local.json`. See README.md for recommended team patterns.
 
 ## Branch Workflow
 
@@ -128,7 +136,9 @@ All changes on feature branches: `git checkout -b <type>/<scope>-<description>-<
 
 - `.claude/VERSION` follows semver; bump on every release. `.claude/CHANGELOG.md` tracks what changed.
 - `/dream` triggers memory consolidation (merges, prunes, deduplicates MEMORY.md). Run after major refactors.
+- `settings.json` ships security policy (sandbox, permissions, hooks) and attribution only. Don't pin session behavior (effort, env toggles, LSP plugins, MCP auto-approval); `validate.sh` rejects the retired keys, and a key you retire needs a matching entry in update.sh's retired-defaults migration. Default MCP servers must start with no key and no extra install; the rest are opt-in in README.
+- Model routing: `model: opus` = deep reasoning, `model: sonnet` = implementation/mechanical/docs, no `model:` line = inherit the session model (strongest-model work). Commands get `model: sonnet` only when mechanical and run at session start (a mid-session switch drops the prompt cache). Never hardcode `fable`/`claude-fable-*`; `modelDefaults` is not a Claude Code setting.
 
 ---
 
-**Main config**: `CLAUDE-solana.md` | **Agents**: `.claude/agents/` | **Skills**: `.claude/skills/` | **Commands**: `.claude/commands/` | **MCP**: `.mcp.json` | **Rules**: `.claude/rules/`
+**Main config**: `CLAUDE-solana.md` | **Agents**: `.claude/agents/` | **Skills**: `.claude/skills/` | **Commands**: `.claude/commands/` | **MCP**: `.mcp.json`

@@ -26,8 +26,8 @@ assert_file_contains "$REPO_ROOT/QUICK-START.md" "30 Slash Commands" "QUICK-STAR
 # --- MCP server count cross-references ---
 echo "[mcp]"
 MCP_COUNT=$(python3 -c "import json; print(len(json.load(open('$REPO_ROOT/.mcp.json'))['mcpServers']))" 2>/dev/null)
-assert_eq "7" "$MCP_COUNT" "MCP server count in mcp.json is 7"
-assert_file_contains "$REPO_ROOT/README.md" "7 MCP server" "README.md references 7 MCP servers"
+assert_eq "3" "$MCP_COUNT" "MCP server count in mcp.json is 3"
+assert_file_contains "$REPO_ROOT/README.md" "3 MCP server" "README.md references 3 MCP servers"
 
 # --- MCP servers appear in CLAUDE-solana.md ---
 echo "[mcp-in-claude-solana]"
@@ -62,6 +62,11 @@ for cmd_file in "$REPO_ROOT/.claude/commands/"*.md; do
   CMD_BASENAME=$(basename "$cmd_file" .md)
   assert_file_contains "$REPO_ROOT/QUICK-START.md" "/$CMD_BASENAME" "QUICK-START.md contains command: /$CMD_BASENAME"
 done
+
+# --- README version badge matches .claude/VERSION ---
+echo "[versioning]"
+KIT_VERSION=$(grep -oE '[0-9]+\.[0-9]+\.[0-9]+' "$REPO_ROOT/.claude/VERSION" | head -1)
+assert_file_contains "$REPO_ROOT/README.md" "version-$KIT_VERSION-blue" "README.md version badge matches .claude/VERSION ($KIT_VERSION)"
 
 # --- Submodule count matches ext/ directories ---
 echo "[submodules]"

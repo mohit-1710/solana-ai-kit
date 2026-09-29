@@ -36,4 +36,24 @@ done
 echo ""
 assert_eq "30" "$COUNT" "Total command count is 30"
 
+echo ""
+echo "[test_commands] Checking setup-mcp.md covers every .env.example key..."
+
+ENV_EXAMPLE="$REPO_ROOT/.env.example"
+SETUP_MCP="$CMDS_DIR/setup-mcp.md"
+
+if [ -f "$ENV_EXAMPLE" ] && [ -f "$SETUP_MCP" ]; then
+  while IFS= read -r key; do
+    [ -z "$key" ] && continue
+    assert_file_contains "$SETUP_MCP" "$key" "setup-mcp.md mentions .env.example key: $key"
+  done < <(grep -oE '^[A-Z_][A-Z0-9_]*=' "$ENV_EXAMPLE" | sed 's/=$//')
+else
+  assert_eq "0" "1" ".env.example and setup-mcp.md both exist for drift check"
+fi
+
+echo ""
+echo "[test_commands] Checking --agents install-mode support..."
+assert_file_contains "$CMDS_DIR/resync.md" ".agents/bin" "resync.md supports --agents installs (.agents/bin)"
+assert_file_contains "$CMDS_DIR/update.md" ".agents/bin" "update.md supports --agents installs (.agents/bin)"
+
 print_summary

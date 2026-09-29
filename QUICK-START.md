@@ -5,10 +5,10 @@
 ```bash
 # Option 1: One-liner installer (recommended)
 curl -fsSL https://aikit.superteam.codes | bash
-# Fallback (or before the aikit.superteam.codes DNS is live): curl -fsSL https://raw.githubusercontent.com/solanabr/solana-ai-kit/main/install.sh | bash
+# Fallback (or before the aikit.superteam.codes DNS is live): curl -fsSL https://raw.githubusercontent.com/solanabr/ai-kit/main/install.sh | bash
 
 # Option 2: Manual setup
-git clone --recurse-submodules https://github.com/solanabr/solana-ai-kit.git
+git clone --recurse-submodules https://github.com/solanabr/ai-kit.git
 cp -r solana-ai-kit/.claude /path/to/your-project/
 cp solana-ai-kit/CLAUDE-solana.md /path/to/your-project/CLAUDE.md
 cd /path/to/your-project && git submodule update --init --recursive
@@ -25,14 +25,17 @@ That's it. Claude now has Solana superpowers.
 
 ## Optional: Configure MCP Servers
 
-After setup, run `/setup-mcp` in Claude Code to configure:
+On by default (Claude Code asks once before it starts them):
 - **Helius** — On-chain data, DAS API, webhooks (needs API key from helius.dev)
 - **solana-dev** — Solana Foundation official docs and API references (no key needed)
 - **Context7** — Library documentation lookup (no key needed)
-- **Playwright** — Browser automation for dApp testing (no key needed)
-- **context-mode** — Context window optimization for large responses (no key needed)
-- **memsearch** — Persistent AI memory across sessions (no key needed)
-- **Surfpool** — Agent-driven local validator / mainnet-fork control (no key needed; requires the `surfpool` CLI installed)
+
+Opt-in, because each needs a browser, a CLI or a workflow choice. Run `/setup-mcp` to set the Helius key and add any of these:
+- **Playwright** — Browser automation for dApp testing
+- **Surfpool** — Agent-driven local validator / mainnet-fork control (requires the `surfpool` CLI)
+- **context-mode** — Keeps large tool output out of the context window
+
+The kit pins no effort level, agent teams or LSP plugins; README's "Settings the kit leaves to you" shows how to turn them on.
 
 ---
 
@@ -41,13 +44,13 @@ After setup, run `/setup-mcp` in Claude Code to configure:
 Prefer Claude Code's plugin system? solana-ai-kit is its own marketplace. From inside Claude Code:
 
 ```text
-/plugin marketplace add solanabr/solana-ai-kit
+/plugin marketplace add https://github.com/solanabr/ai-kit.git
 /plugin install solana-ai-kit@stbr
 ```
 
-The plugin ships the core kit — agents, commands, the local go-to-market + registry skills, the 7 MCP servers, and the dev hooks. Commands namespace as `/solana-ai-kit:<name>` (e.g. `/solana-ai-kit:deploy`).
+The plugin ships the core kit — agents, commands, the local go-to-market + registry skills, the 3 default MCP servers, and the dev hooks. Commands namespace as `/solana-ai-kit:<name>` (e.g. `/solana-ai-kit:deploy`).
 
-Plugins are plain git clones, so they can't carry the 18 `ext/` submodules, the `.claude/rules/*` code-style law, or the permissions/sandbox policy — those need the **full install** (the `install.sh` one-liner above). For protocol-skill depth in plugin form, add the upstream marketplaces instead (`/plugin marketplace add sendaifun/skills`, etc.). Running both the plugin and the full install in one project double-loads commands/hooks/MCP — `/doctor` flags it; pick one.
+Plugins are plain git clones, so they can't carry the 18 `ext/` submodules, the project `CLAUDE.md` with its program-code house rules, or the permissions/sandbox policy — those need the **full install** (the `install.sh` one-liner above). For protocol-skill depth in plugin form, add the upstream marketplaces instead (`/plugin marketplace add sendaifun/skills`, etc.). Running both the plugin and the full install in one project double-loads commands/hooks/MCP — `/doctor` flags it; pick one.
 
 ---
 
@@ -60,7 +63,7 @@ Plugins are plain git clones, so they can't carry the 18 `ext/` submodules, the 
 | **solana-architect** | System design, account structures, PDAs |
 | **anchor-engineer** | Anchor program development |
 | **pinocchio-engineer** | CU-optimized native programs |
-| **defi-engineer** | DeFi integrations (Jupiter, Drift, Kamino, etc.) |
+| **defi-engineer** | DeFi integrations (Jupiter, Kamino, etc.) |
 | **token-engineer** | Token-2022 extensions, token launches |
 | **solana-frontend-engineer** | React/Next.js dApp frontends |
 | **mobile-engineer** | React Native/Expo mobile dApps |
@@ -72,6 +75,8 @@ Plugins are plain git clones, so they can't carry the 18 `ext/` submodules, the 
 | **unity-engineer** | Unity/C# with Solana.Unity-SDK |
 | **solana-guide** | Learning and tutorials |
 | **solana-researcher** | Ecosystem research |
+
+Each agent runs on Opus, Sonnet, or your own session model (never a pinned Fable). See [README → Agents](README.md#agents) for the routing.
 
 ### 30 Slash Commands
 
@@ -115,17 +120,14 @@ Plugins are plain git clones, so they can't carry the 18 `ext/` submodules, the 
 
 ### Agent Teams
 
-Create multi-agent workflows:
+Agent teams are experimental and off by default. Opt in with `{"env": {"CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"}}` in `.claude/settings.local.json`, then create multi-agent workflows:
 ```
-"Create an agent team: architect for design, anchor-engineer for code, qa-engineer for tests"
+"Create an agent team: solana-architect for design, anchor-engineer for code, solana-qa-engineer for tests"
 ```
 
-### Auto-Loading Rules
+### Small Always-On Context
 
-Rules automatically activate based on file patterns:
-- `.rs` files → Rust rules
-- `.cs` files → C#/.NET rules
-- `.ts/.tsx` files → TypeScript rules
+Only `CLAUDE.md` (program-code house rules and workflow) and one-line agent/command descriptions load every session. The kit ships no `.claude/rules/`; add your own project rules there with `paths:` frontmatter so they load only for matching files.
 
 ### Progressive Skills
 
@@ -204,7 +206,6 @@ your-project/
 │   │   ├── token-2022.md     # Token Extensions guide
 │   │   ├── backend-async.md  # Axum/Tokio patterns
 │   │   └── deployment.md     # Deploy workflows
-│   ├── rules/             # Auto-loading rules
 │   └── settings.json      # Permissions
 ├── .mcp.json              # MCP server configs (project root)
 ├── programs/              # Your Solana programs
@@ -277,7 +278,7 @@ Edit `.claude/settings.json` to customize allowed commands.
 
 ### Configure MCP Servers
 
-Edit `.env` to add API keys for MCP servers (Helius, Solana Agent Kit). Run `/setup-mcp` for guided setup.
+Edit `.env` to add API keys for MCP servers (Helius). Run `/setup-mcp` for guided setup and the optional servers.
 
 ---
 
